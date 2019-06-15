@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Multiple user tracker</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.0.1/dist/leaflet.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        var username = prompt('What\'s your username?');
+        var tinyIcon = L.Icon.extend({
+            options: {
+                shadowUrl: './assets/marker-shadow.png',
+                iconSize: [25, 39],
+                iconAnchor: [12, 36],
+                shadowSize: [41, 41],
+                shadowAnchor: [12, 38],
+                popupAnchor: [0, -30]
+            }
+        });
+
+        var redIcon = new tinyIcon({
+            iconUrl: './assets/marker-red.png'
+        });
+        var yellowIcon = new tinyIcon({
+            iconUrl: './assets/marker-yellow.png'
+        });
+
+        socket = io.connect('/');
+
+        // emit username when user connects before the map loads
+        socket.emit('add user', username);
+
+    </script>
+    <style>
+        body {
+            padding: 0;
+            margin: 0;
+        }
+
+        html,
+        body,
+        #map {
+            height: 100vh;
+            width: 100vw;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="map"></div>
+    <script>
+        function initializeMapAndLocator() {
+
+            /* -------------------------------------------------
+                  CREATING MAP AND INITIALIZING MARKERS OBJECT (EMPTY)
+          --------------------------------------------------- */
+            var markers = {};
+            var mymarker;
+            var map = L.map('map');
+            googleStreets = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+                maxZoom: 18,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+            }).addTo(map);
+
+            /* -------------------------------------------------
+                             FOR ZOOMING THE MAP VIEW TO THE DETECTED LOCATION
+                     --------------------------------------------------- */
+
+            map.locate({
+                setView: true,
+                maxZoom: 20
+            });
+
+        /* -------------------------------------------------
+                             SEND COORDS OF A SPECIFIC USER TO SERVER AND DISPLAY POPUP WITH USERNAME
+                      --------------------------------------------------- */
+
+            function onLocationFound(e) {
+                var radius = e.accuracy / 2;
+                
+                map.locate({
+                    setView: false,
+                    timeout: 60000,
+                    enableHighAccuracy: true
+                });
+
+                var newlatlng = e.latlng;
+                const new_lat = newlatlng.lat;
+                const new_lng = newlatlng.lng;
+
+                var Details = {
+                    username: username,
+                    active: true,
+                    new_lat: new_lat,
+                    new_lng: new_lng,
+                    update: true
+                };
+                // SEND USER COORDS TO SERVER
+                socket.emit('new_coords', Details);
+                
+                if (map.hasLayer(mymarker)) {
+                    map.removeLayer(mymarker);
+                }
+
+                mymarker = new L.Marker(e.latlng, {
+                    icon: yellowIcon,
+                    draggable: true
+                });
+
+                map.addLayer(mymarker);
+                mymarker.bindPopup('<p>You are here ' + username + '</p>').openPopup();
+            }
+
+            map.on('locationfound', onLocationFound);
+
+            /* -------------------------------------------------
+                    DISPLAY COORDINATES OF CURRENT USERS
+            --------------------------------------------------- */
+
+            // Get users ARRAY and show them in our MAP data = users ARRAY
+            socket.on('load_init', function (data) {
+                for (var i = 0; i < data.length; i++) {
+                    // Create markers for each current user
+                    if (data[i].lat != null) {
+                        markers[data[i].username] = new L.marker([data[i].lat, data[i].lng], {
+                            draggable: true,
+                            icon: redIcon
+                        });
+
+                        // Add generated markers to map by USERNAME
+                        map.addLayer(markers[data[i].username]);
+                        markers[data[i].username].bindPopup('Online :' + data[i].username);
+                    }
+                }
+            });
+
+              /* -------------------------------------------------
+                    EXISTING USERS UPDATING THEIR COORDS
+            --------------------------------------------------- */
+
+            socket.on('updatecoords', function (data) {
+                console.log('updatedcoords',data);
+                // DELETE CURRENT MARKER IF IT EXISTS
+                if (map.hasLayer(markers[data.username])) {
+                    map.removeLayer(markers[data.username]);
+                }
+                // CREATE NEW MARKER WITH NEW COORDS; RED ICON IF USER UPDATES COORDS
+                markers[data.username] = new L.marker([data.lat, data.lng], {
+                    draggable: true,
+                    icon: redIcon
+                });
+
+                map.addLayer(markers[data.username]);
+                markers[data.username].bindPopup(data.username + ' is on the move').openPopup();
+            });
+
+            
+        /* -------------------------------------------------
+                          ON DISCONNECT REMOVE MARKER
+                  --------------------------------------------------- */
+
+            socket.on('remove_marker', function (data) {
+                map.removeLayer(markers[data.username]);
+            });
+
+        };
+
+        // When map is loaded this event is sent to the server and the server sends back the users ARRAY
+        socket.emit('load_init');
+
+        /* -------------------------------------------------
+                          STARTS EXECUTING SOCKET EVENTS FROM CLIENT
+                  --------------------------------------------------- */
+
+        initializeMapAndLocator();
+    </script>
+</body>
+
+</html>
