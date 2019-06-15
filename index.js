@@ -33,6 +33,7 @@ io.on('connection', (socket) => {
         users.push(new_user);
         console.log(users);
     });
+    
   /* -------------------------------------------------
                              NEW USER COORDS FROM CLIENT
                      --------------------------------------------------- */

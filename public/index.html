@@ -25,8 +25,13 @@
         var redIcon = new tinyIcon({
             iconUrl: './assets/marker-red.png'
         });
+
         var yellowIcon = new tinyIcon({
             iconUrl: './assets/marker-yellow.png'
+        });
+
+        var faceIcon = new tinyIcon({
+            iconUrl: './assets/face1.png'
         });
 
         socket = io.connect('/');
@@ -73,16 +78,18 @@
 
             map.locate({
                 setView: true,
-                maxZoom: 20
+                maxZoom: 20,
+                watch: true
             });
 
-        /* -------------------------------------------------
-                             SEND COORDS OF A SPECIFIC USER TO SERVER AND DISPLAY POPUP WITH USERNAME
-                      --------------------------------------------------- */
+            /* -------------------------------------------------
+                                 SEND COORDS OF A SPECIFIC USER TO SERVER AND DISPLAY POPUP WITH USERNAME
+                          --------------------------------------------------- */
 
             function onLocationFound(e) {
+             
                 var radius = e.accuracy / 2;
-                
+
                 map.locate({
                     setView: false,
                     timeout: 60000,
@@ -100,17 +107,20 @@
                     new_lng: new_lng,
                     update: true
                 };
+
                 // SEND USER COORDS TO SERVER
                 socket.emit('new_coords', Details);
-                
+
                 if (map.hasLayer(mymarker)) {
                     map.removeLayer(mymarker);
                 }
 
                 mymarker = new L.Marker(e.latlng, {
-                    icon: yellowIcon,
+                    icon: faceIcon,
                     draggable: true
                 });
+
+                console.log('El usuario solo sonrie', Details.username);
 
                 map.addLayer(mymarker);
                 mymarker.bindPopup('<p>You are here ' + username + '</p>').openPopup();
@@ -128,7 +138,7 @@
                     // Create markers for each current user
                     if (data[i].lat != null) {
                         markers[data[i].username] = new L.marker([data[i].lat, data[i].lng], {
-                            draggable: true,
+                            draggable: false,
                             icon: redIcon
                         });
 
@@ -139,30 +149,29 @@
                 }
             });
 
-              /* -------------------------------------------------
-                    EXISTING USERS UPDATING THEIR COORDS
-            --------------------------------------------------- */
+            /* -------------------------------------------------
+                  EXISTING USERS UPDATING THEIR COORDS
+          --------------------------------------------------- */
 
             socket.on('updatecoords', function (data) {
-                console.log('updatedcoords',data);
+                console.log('Se actualizo amarillo', data.username);
                 // DELETE CURRENT MARKER IF IT EXISTS
                 if (map.hasLayer(markers[data.username])) {
                     map.removeLayer(markers[data.username]);
                 }
                 // CREATE NEW MARKER WITH NEW COORDS; RED ICON IF USER UPDATES COORDS
                 markers[data.username] = new L.marker([data.lat, data.lng], {
-                    draggable: true,
-                    icon: redIcon
+                    draggable: false,
+                    icon: yellowIcon
                 });
 
                 map.addLayer(markers[data.username]);
                 markers[data.username].bindPopup(data.username + ' is on the move').openPopup();
             });
 
-            
-        /* -------------------------------------------------
-                          ON DISCONNECT REMOVE MARKER
-                  --------------------------------------------------- */
+            /* -------------------------------------------------
+                              ON DISCONNECT REMOVE MARKER
+                      --------------------------------------------------- */
 
             socket.on('remove_marker', function (data) {
                 map.removeLayer(markers[data.username]);
